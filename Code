@@ -1,0 +1,134 @@
+import streamlit as st
+import pandas as pd
+import joblib
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+import base64
+
+# Function to set a dynamic background image based on AQI status
+def set_background(image_file):
+    with open(image_file, "rb") as file:
+        encoded_string = base64.b64encode(file.read()).decode()
+    
+    page_bg_img = f"""
+    <style>
+    .stApp {{
+        background-image: url("data:image/jpg;base64,{encoded_string}");
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+    }}
+    
+    /* Semi-transparent box for text */
+    .text-box {{
+        background-color: rgba(255, 255, 255, 0.8); /* White with 80% opacity */
+        padding: 20px;
+        border-radius: 10px;
+        margin: 20px;
+    }}
+    
+    /* Set all text elements to black for visibility */
+    h1, h2, h3, h4, h5, h6, p, label, span, div {{
+        color: black !important;
+    }}
+    
+    .stButton>button {{
+        background-color: rgba(255, 255, 255, 0.8) !important;
+        color: black !important;
+    }}
+
+    /* Success message color */
+    .stSuccess {{
+        color: black !important;
+    }}
+    /* AQI Range Box */
+    .aqi-range-box {{
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: rgba(255, 255, 255, 0.8); /* White with 80% opacity */
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+    }}
+    </style>
+    """
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+
+# Load and preprocess the dataset
+file_path = "data_date.csv"  # Replace with your dataset path
+df = pd.read_csv(file_path)
+
+# Encode the 'Status' column
+status_encoder = LabelEncoder()
+df['Status_encoded'] = status_encoder.fit_transform(df['Status'])
+
+# Train the model
+X = df[['AQI Value']]
+y = df['Status_encoded']
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model.fit(X, y)
+
+# Save the model and encoder
+joblib.dump(rf_model, "aqi_model.pkl")
+joblib.dump(status_encoder, "status_encoder.pkl")
+
+# Load trained model and encoder
+rf_model = joblib.load("aqi_model.pkl")
+status_encoder = joblib.load("status_encoder.pkl")
+
+# Streamlit UI
+st.title("🌍 AQI Status Predictor")
+st.write("Enter AQI value to predict the air quality status.")
+
+# User Input
+aqi_value = st.number_input("Enter AQI Value:", min_value=0, step=1)
+
+# Display AQI Range Information in the Bottom Right Corner
+st.markdown(
+    """
+    <div class="aqi-range-box">
+        <h4>AQI Ranges:</h4>
+        <ul>
+            <li><strong>Good:</strong> 0 - 50</li>
+            <li><strong>Moderate:</strong> 51 - 100</li>
+            <li><strong>Unhealthy for Sensitive Groups:</strong> 101 - 150</li>
+            <li><strong>Unhealthy:</strong> 151 - 200</li>
+            <li><strong>Very Unhealthy:</strong> 201 - 300</li>
+            <li><strong>Hazardous:</strong> 301+</li>
+        </ul>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+if st.button("Predict AQI Status"):
+    pred = rf_model.predict([[aqi_value]])[0]
+    predicted_status = status_encoder.inverse_transform([pred])[0]
+
+    # Set background based on predicted status
+    if predicted_status == "Good":
+        set_background("good.webp")  # Ensure "good_aqi.jpg" exists
+    elif predicted_status == "Moderate":
+        set_background("moderate.webp")  # Ensure "moderate_aqi.jpg" exists
+    elif predicted_status=="Unhealthy for Sensitive Groups":
+        set_background("Unhealthy for Sensitive Groups.webp")
+    elif predicted_status == "Unhealthy":
+        set_background("unhealthy.webp")  # Ensure "unhealthy_aqi.jpg" exists
+    elif predicted_status == "Very Unhealthy":
+        set_background("Very Unhealthy.webp")
+    elif predicted_status == "Hazardous":
+        set_background("hazardous.webp")  # Ensure "hazardous_aqi.jpg" exists
+    else:
+        set_background("background.jpg")  # Default background
+
+    # Display prediction result inside a semi-transparent box
+    st.markdown(
+        f"""
+        <div class="text-box">
+            <h3>✅ The predicted AQI Status is: <strong>{predicted_status}</strong></h3>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
